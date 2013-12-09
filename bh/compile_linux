@@ -1,2 +1,3 @@
 echo "Make sure to change the path to CBLAS in this file before running it!"
-g++ quadtree.cpp tsne.cpp -o bh_tsne -O3 -I./CBLAS/include -L./ -lcblas
+# the following works on suse, with libatlas sse3 installed
+ g++ quadtree.cpp tsne.cpp -o bh_tsne -O3  /usr/lib64/atlas/libcblas.a /usr/lib64/atlas/libatlas.a

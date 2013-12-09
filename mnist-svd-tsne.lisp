@@ -1,12 +1,12 @@
-(load "/home/pi/quicklisp/setup.lisp")
+(load "~/quicklisp/setup.lisp")
 (ql:quickload "gsll")
 
 (defparameter *dat* ;; read in the images of the mnist digits
- (with-open-file (s "/media/mnist/t10k-images-idx3-ubyte"
+ (with-open-file (s "train-images-idx3-ubyte"
 		    :element-type '(unsigned-byte 8))
    (let ((a (make-array (file-length s) :element-type '(unsigned-byte 8))))
      (read-sequence a s)
-     (make-array (list 10000 (* 28 28)) :element-type '(unsigned-byte 8)
+     (make-array (list 60000 (* 28 28)) :element-type '(unsigned-byte 8)
 		 :displaced-to a
 		 :displaced-index-offset 16))))
 
@@ -40,34 +40,39 @@
     (write-sequence (loop for i below 4 collect (ccl:paref a :unsigned-char i))
 		    s)))
 
-(let ((b *small-x*)) 
-  (destructuring-bind (n hw) (array-dimensions b)
-   (declare (type fixnum n hw))
-   (let* ((n-small 1000)
+(defun bla ()
+ (let ((b (grid:cl-array (first *svd*)))) 
+   (let* ((n-small 60000)
+	  (hw-small 50)
 	  (theta .5d0)
 	  (perplexity 30d0)
-	  (a (make-array (* n-small hw) :element-type 'double-float))
-	  (a2 (make-array (list n-small hw) :element-type 'double-float
+	  (a (make-array (* n-small hw-small) :element-type 'double-float))
+	  (a2 (make-array (list n-small hw-small) :element-type 'double-float
 			  :displaced-to a)))
-     (declare (type fixnum n-small)
+     (declare (type fixnum n-small hw-small)
 	      (type double-float theta perplexity)
 	      (type (simple-array double-float 1) a)
-	      (type (array double-float 2) a2))
-     (dotimes (j 1)
-       (declare (type fixnum j))
-       (let ((avg 0d0 #+nil (loop for i below hw sum (aref b j i))))
-	 (dotimes (i hw)
-	   (declare (type fixnum i))
-	   (setf (aref a2 j i) (- (* 1d0 (aref b j i)) avg)))))
+	      (type (array double-float 2) a2 b))
+     (dotimes (j n-small)
+       (dotimes (i hw-small)
+	 (setf (aref a2 j i) (aref b j i))))
      (with-open-file (s "/dev/shm/data.dat" :direction :output
-			:if-exists :supersede :if-does-not-exist :create
-			:element-type '(unsigned-byte 8))
+			     :if-exists :supersede :if-does-not-exist :create
+			     :element-type '(unsigned-byte 8))
        (write-int32 n-small s)
-       (write-int32 hw s)
+       (write-int32 hw-small s)
        (write-double theta s)
        (write-double perplexity s)
-       (dotimes (i (* n-small hw))
-	 (write-double (aref a i) s))))))
+       (defparameter *filepos* (file-position s)))
+     (with-open-file (s "/dev/shm/data.dat" :direction :output
+			:if-exists :append :if-does-not-exist :create
+			:element-type 'double-float)
+       (file-position s *filepos*)
+       (write-sequence a s)
+       nil))))
+
+#+nil
+(bla)
 
 (defparameter *mapped-x*
  (progn 
@@ -80,8 +85,8 @@
    ;; the range is -1.7 .. 1.7
    (with-open-file (s "/dev/shm/result.dat" :element-type 'double-float)
      (file-position s (* 2 4)) ;; jump over the first two integers1
-     (let* ((a2 (make-array (list 1000 2) :element-type 'double-float))
-	   (a (make-array (* 1000 2) :element-type 'double-float
+     (let* ((a2 (make-array (list 60000 2) :element-type 'double-float))
+	   (a (make-array (* 60000 2) :element-type 'double-float
 			  :displaced-to a2)))
        (read-sequence a s)
        (format t "max min ~a~%" (list (reduce #'max a)
@@ -92,18 +97,18 @@
  (progn ;; read the labels
    ;; 72104149590690159734
    ;; 00000000  00 00 08 01 00 00 27 10  07 02 01 00 04 01 04 09  |......'.........|
-   (with-open-file (s "/media/mnist/t10k-labels-idx1-ubyte"
+   (with-open-file (s "train-labels-idx1-ubyte"
 		      :element-type '(unsigned-byte 8))
      (file-position s 8)
-     (let ((a (make-array 10000 :element-type '(unsigned-byte 8))))
+     (let ((a (make-array 60000 :element-type '(unsigned-byte 8))))
       (read-sequence a s)
       a))))
 
 
 (progn ;; plot the mapped 2d data
  (let* ((w 400) 
-	(mi -1.8)
-	(ma 1.8)
+	(mi -30)
+	(ma 30)
 	(s (* (1- w) (/ (- ma mi))))
 	(a (make-array (list w w 3) :element-type '(unsigned-byte 8)))
 	(colors '((128 0 0) (255 0 0) (255 128 0) (255 255 0)
@@ -158,7 +163,7 @@
       (setf (aref a1 i) (aref *dat* j i)))
     a))
 (defun get-mnist-slice-v (v j)
-  (let* ((f 2)
+  (let* ((f 1)
 	 (wf (floor 28 f))
 	 (a (make-array (list wf wf) :element-type 'double-float))
 	 (a1 (make-array (* wf wf) :element-type 'double-float
@@ -193,9 +198,9 @@
 
 (time
  (defparameter *dat0*
-   (let ((a *dat-small*))
+   (let ((a *dat*))
     (destructuring-bind (n hw) (array-dimensions a)
-      (let* ((nsmall 300)
+      (let* ((nsmall 60000)
 	     (b (make-array (list nsmall hw) :element-type 'double-float)))
 	(declare (type (simple-array double-float 2) b)
 		 (type (array (unsigned-byte 8) 2) a))
@@ -269,7 +274,7 @@
    (declare (type fixnum n hw)
 	    (type (array double-float 2) a))
    (defparameter *small-x*
-     (let* ((d 50)
+     (let* ((d 400)
 	    (c (make-array (list n d) :element-type 'double-float
 			   :initial-element 0d0)))
        (declare (type fixnum d)
@@ -303,19 +308,40 @@
 	       (incf (aref c j i) (* (aref a j k) (aref *v* i k))
 		     ))))
 	 c)))))
+
+(defparameter *recon2*
+ (let ((u (first *svd*))
+       (v (third *svd*))
+       (s (second *svd*))) 
+   (destructuring-bind (n hw) (array-dimensions u)
+     (declare (type fixnum n hw)
+	      (type (array double-float 2) u s v))
+     (let* ((c (make-array (list n hw) :element-type 'double-float
+			   :initial-element 0d0))
+	    (hw-small 200))
+       (declare (type fixnum d)
+		(type (simple-array double-float 2) c))
+       (dotimes (j 100)
+	 (declare (type fixnum j))
+	 (dotimes (i hw)
+	   (declare (type fixnum i))
+	   (dotimes (k hw-small)
+	     (declare (type fixnum k))
+	     (incf (aref c j i) (* (aref u j k) (aref v i k))))))
+       c))))
 #+nil
-(dotimes (i 10)
+(dotimes (i 100)
    (write-pgm (format nil "/dev/shm/recon~3,'0d.pgm" i)
 	      (scale-ub8 (get-mnist-slice-recon i))))
 
 (defun get-mnist-slice-recon (j)
-  (let* ((f 2)
+  (let* ((f 1)
 	 (wf (floor 28 f))
 	 (a (make-array (list wf wf) :element-type 'double-float))
 	 (a1 (make-array (* wf wf) :element-type 'double-float
 			 :displaced-to a)))
     (dotimes (i wf)
       (dotimes (k wf)
-       (setf (aref a i k) (aref *recon*  j (+ (* wf k) i)))))
+       (setf (aref a i k) (aref *recon2*  j (+ (* wf k) i)))))
     a))
 
